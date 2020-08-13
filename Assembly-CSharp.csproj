@@ -8,7 +8,8 @@
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProductVersion>10.0.20506</ProductVersion>
     <SchemaVersion>2.0</SchemaVersion>
-    <RootNamespace></RootNamespace>
+    <RootNamespace>
+    </RootNamespace>
     <ProjectGuid>{A9C6A3E7-F7E6-C880-8FFA-B82E571A36B9}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
@@ -81,6 +82,7 @@
     <Compile Include="Assets\Scripts\Rotator.cs" />
     <Compile Include="Assets\Scripts\UIManager.cs" />
     <None Include="Assets\Fonts\License.txt" />
+    <None Include="Assets\README.md" />
     <Reference Include="Unity.Timeline.Editor">
       <HintPath>E:/Unity/Retro_Unity/My_Folder/14/Zombie/Library/ScriptAssemblies/Unity.Timeline.Editor.dll</HintPath>
     </Reference>
