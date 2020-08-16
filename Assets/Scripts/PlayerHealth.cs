@@ -59,13 +59,10 @@ public class PlayerHealth : LivingEntity {
             // 사망하지 않은 경우에만 효과음 재생
             playerAudioPlayer.PlayOneShot(hitClip);
         }
-        else
-        {
-            // LivingEntity의 OnDamage() 실행(데미지 적용)
-            base.OnDamage(damage, hitPoint, hitDirection);
-            // 갱신된 체력을 체력 슬라이더에 적용한다.
-            healthSlider.value = health;
-        }
+        // LivingEntity의 OnDamage() 실행(데미지 적용)
+        base.OnDamage(damage, hitPoint, hitDirection);
+        // 갱신된 체력을 체력 슬라이더에 적용한다.
+        healthSlider.value = health;
     }
 
     // 사망 처리
