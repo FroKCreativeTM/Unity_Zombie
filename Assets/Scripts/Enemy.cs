@@ -4,10 +4,10 @@ using UnityEngine.AI; // AI, 내비게이션 시스템 관련 코드를 가져�
 
 // 적 AI를 구현한다
 public class Enemy : LivingEntity {
-    public LayerMask whatIsTarget; // 추적 대상 레이어
+    public LayerMask whatIsTarget; // 추적 대상 레이어(추적 대상을 검색하는 레이어이다.)
 
-    private LivingEntity targetEntity; // 추적할 대상
-    private NavMeshAgent pathFinder; // 경로계산 AI 에이전트
+    private LivingEntity targetEntity; // 추적할 대상(살아있는 대상을 추적한다.)
+    private NavMeshAgent pathFinder; // 경로계산 AI 에이전트(할당된 살아있는 생명체로의 경로를 계산하고 추적하는 용도이다.)
 
     public ParticleSystem hitEffect; // 피격시 재생할 파티클 효과
     public AudioClip deathSound; // 사망시 재생할 소리
@@ -39,10 +39,31 @@ public class Enemy : LivingEntity {
 
     private void Awake() {
         // 초기화
+        pathFinder = GetComponent<NavMeshAgent>();
+        enemyAnimator = GetComponent<Animator>();
+        enemyAudioPlayer = GetComponent<AudioSource>();
+
+        // 렌더러 컴포넌트는 자식 게임 오브젝트에 있으므로 GetComponentInChildren()을 사용한다.
+        enemyRenderer = GetComponentInChildren<Renderer>();
     }
 
     // 적 AI의 초기 스펙을 결정하는 셋업 메서드
     public void Setup(float newHealth, float newDamage, float newSpeed, Color skinColor) {
+        // 스크립트 상에서 직접 적용하지 않는 부분이다.
+        // 고로 public 선언
+
+        // 체력 설정
+        startingHealth = newHealth;
+        health = newHealth;
+
+        // 공격력 설정
+        damage = newDamage;
+
+        // 내비메시 에이전트의 이동속도 설정
+        pathFinder.speed = newSpeed;
+
+        // 렌더러가 사용 중인 머터리얼의 컬러 변경, 외형 색이 변한다.
+        enemyRenderer.material.color = skinColor;
     }
 
     private void Start() {
@@ -60,6 +81,39 @@ public class Enemy : LivingEntity {
         // 살아있는 동안 무한 루프
         while (!dead)
         {
+            if(hasTarget)
+            {
+                // 추적 대상 존재 : 경로 갱신 및 AI 이동 진행
+                pathFinder.isStopped = false;
+                pathFinder.SetDestination(targetEntity.transform.position);
+            }
+            else
+            {
+                // 추적 대상 없음 : AI 이동 중지
+                pathFinder.isStopped = true;
+
+                // 20 유닛의 반지름을 가진 가장의 구를 그렸을 때 구와 겹치는 모든 콜라이더를 가져온다.
+                // 단 whatIsTarget 레이어를 가진 콜라이더만 가져오도록 필터링
+                Collider[] coliiders = Physics.OverlapSphere(transform.position, 20f, whatIsTarget);
+
+                // 모든 콜라이더를 순회하면서 살아있는 LivingEntity를 찾기
+                for (int i = 0; i < coliiders.Length; i++)
+                {
+                    // 콜라이더로부터 LivingEntity 컴포넌트를 가져온다.
+                    LivingEntity livingEntity = coliiders[i].GetComponent<LivingEntity>();
+
+                    // LivingEntity가 존재하며, 해당 것이 살아있다면
+                    if (livingEntity != null && !livingEntity.dead)
+                    {
+                        // 추적 대상을 해당 LivingEntity로 설정
+                        targetEntity = livingEntity;
+
+                        // for문 즉시 정지
+                        break;
+                    }
+                }
+            }
+
             // 0.25초 주기로 처리 반복
             yield return new WaitForSeconds(0.25f);
         }
@@ -67,6 +121,18 @@ public class Enemy : LivingEntity {
 
     // 데미지를 입었을때 실행할 처리
     public override void OnDamage(float damage, Vector3 hitPoint, Vector3 hitNormal) {
+        // 아직 사망하지 않은 경우에만 피격 효과를 발생시킨다.
+        if (!dead)
+        {
+            // 공격받은 지점과 방향으로 파티클 효과를 재생한다.
+            hitEffect.transform.position = hitPoint;                            // 공격받은 지점
+            hitEffect.transform.rotation = Quaternion.LookRotation(hitNormal);  // 공격이 날아온 방향과 바라보는 방향(피격방향)
+            hitEffect.Play();
+
+            // 피격 효과음 재생
+            enemyAudioPlayer.PlayOneShot(hitSound);
+        }
+
         // LivingEntity의 OnDamage()를 실행하여 데미지 적용
         base.OnDamage(damage, hitPoint, hitNormal);
     }
@@ -75,9 +141,45 @@ public class Enemy : LivingEntity {
     public override void Die() {
         // LivingEntity의 Die()를 실행하여 기본 사망 처리 실행
         base.Die();
+
+        // 다른 AI를 방해하지 않도록 자신의 모든 콜라이더를 비활성화한다.
+        Collider[] enemyColliders = GetComponents<Collider>();
+        for (int i = 0; i < enemyColliders.Length; i++)
+        {
+            enemyColliders[i].enabled = false;
+        }
+
+        // AI 추적을 중지하고 내비메시 컴포넌트 비활성화
+        pathFinder.isStopped = true;
+        pathFinder.enabled = false;
+
+        // 사망 애니매이션 재생 및 효과음 재생
+        enemyAnimator.SetTrigger("Die");
+        enemyAudioPlayer.PlayOneShot(deathSound);
     }
 
     private void OnTriggerStay(Collider other) {
         // 트리거 충돌한 상대방 게임 오브젝트가 추적 대상이라면 공격 실행   
+
+        // 자신이 사망하지 않았으면서 동시에 최근 공격 시점에서 timeBetAttack 이상 시간이 지났다면 공격 가능
+        if(!dead && Time.time >= lastAttackTime + timeBetAttack)
+        {
+            // 상대방의 LivingEntity 타입 가져오기 시도
+            LivingEntity attackTarget = other.GetComponent<LivingEntity>();
+
+            // 상대방의 LivingEntity가 자신의 추적 대상이라면 공격 실행
+            if(attackTarget != null && attackTarget == targetEntity)
+            {
+                // 최근 공격 시간 갱신
+                lastAttackTime = Time.time;
+
+                // 상대방의 피격 위치와 피격 방향을 근사값으로 계산
+                Vector3 hitPoint = other.ClosestPoint(transform.position);
+                Vector3 hitNormal = transform.position - other.transform.position;
+
+                // 공격 실행
+                attackTarget.OnDamage(damage, hitPoint, hitNormal);
+            }
+        }
     }
 }
